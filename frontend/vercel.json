@@ -1,16 +1,8 @@
 {
-  "buildCommand": "npm run build",
-  "devCommand": "npm run dev",
-  "installCommand": "npm install",
-  "framework": "vite",
-  "outputDirectory": "dist",
-  "cleanUrls": false,
-  "env": {
-    "VITE_API_URL": "@vite_api_url"
-  },
-  "env_": {
-    "VITE_API_URL": {
-      "required": true
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
     }
-  }
+  ]
 }
