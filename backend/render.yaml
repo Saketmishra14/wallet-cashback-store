@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: wallet-cashback-backend
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_URI
+        scope: build,runtime
+      - key: FRONTEND_URL
+        scope: build,runtime
+      - key: PORT
+        value: 5000
