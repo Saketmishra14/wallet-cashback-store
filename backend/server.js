@@ -10,11 +10,17 @@ const app = express();
 const MONGODB_URI = process.env.MONGODB_URI;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
+const PORT = process.env.PORT || 5000;
 
-// Validate required environment variables
+// Validate required environment variables for production
 if (!MONGODB_URI) {
-  console.error('❌ MONGODB_URI is not defined in environment variables');
-  process.exit(1);
+  if (NODE_ENV === 'production') {
+    console.error('❌ MONGODB_URI is required in production environment');
+    process.exit(1);
+  } else {
+    console.warn('⚠️  MONGODB_URI is not set. Create a .env file in backend folder.');
+    console.warn('   Copy from .env.example and add your MongoDB connection string.');
+  }
 }
 
 // Middleware
@@ -32,7 +38,14 @@ const corsOptions = {
 app.use(cors(corsOptions));
 
 // MongoDB Connection with retry logic
+let isDBConnected = false;
+
 const connectDB = async () => {
+  if (!MONGODB_URI) {
+    console.warn('⚠️  Skipping MongoDB connection - MONGODB_URI not set');
+    return;
+  }
+
   try {
     await mongoose.connect(MONGODB_URI, {
       serverSelectionTimeoutMS: 5000,
@@ -40,6 +53,7 @@ const connectDB = async () => {
       retryWrites: true,
       w: 'majority',
     });
+    isDBConnected = true;
     console.log("✅ MongoDB Connected successfully");
   } catch (err) {
     console.error('❌ MongoDB connection error:', err.message);
@@ -48,44 +62,72 @@ const connectDB = async () => {
   }
 };
 
-connectDB();
+// Only try to connect if URI is provided
+if (MONGODB_URI) {
+  connectDB();
+}
 
 // Handle connection events
 mongoose.connection.on('connected', () => {
-  console.log('Mongoose connected to MongoDB');
+  isDBConnected = true;
+  console.log('✅ Mongoose connected to MongoDB');
 });
 
 mongoose.connection.on('error', (err) => {
-  console.error('Mongoose connection error:', err);
+  isDBConnected = false;
+  console.error('❌ Mongoose connection error:', err);
 });
 
 mongoose.connection.on('disconnected', () => {
-  console.warn('Mongoose disconnected from MongoDB');
+  isDBConnected = false;
+  console.warn('⚠️  Mongoose disconnected from MongoDB');
 });
 
 // Models
-const Product = require("./models/Product");
+let Product;
+try {
+  Product = require("./models/Product");
+} catch (err) {
+  console.error('❌ Error loading Product model:', err.message);
+}
 
 
 
 app.get("/products", async (req, res) => {
   try {
+    if (!Product) {
+      return res.status(503).json({ 
+        error: 'Product model not available',
+        message: 'Server is initializing. Please try again in a moment.'
+      });
+    }
+
+    if (!isDBConnected) {
+      return res.status(503).json({ 
+        error: 'Database not connected',
+        message: 'Attempting to connect to MongoDB. Please try again in a moment.'
+      });
+    }
 
     const products = await Product.find();
-
     res.json(products);
 
   } catch (error) {
-
-    console.log(error);
-    res.status(500).send("Error fetching products");
-
+    console.error('❌ Error fetching products:', error);
+    res.status(500).json({ 
+      error: 'Error fetching products',
+      message: error.message 
+    });
   }
 });
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
-  res.status(200).json({ message: 'Backend is running', status: 'OK' });
+  return res.status(200).json({ 
+    message: 'Backend is running', 
+    status: 'OK',
+    database: isDBConnected ? 'Connected' : 'Disconnected'
+  });
 });
 
 // Error handling middleware
@@ -100,7 +142,33 @@ app.use((req, res) => {
 });
 
 // Start server
-const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`\n${'='.repeat(60)}`);
+  console.log(`🚀 Backend Server running on http://localhost:${PORT}`);
+  console.log(`${'='.repeat(60)}`);
+  
+  if (!MONGODB_URI) {
+    console.log('\n⚠️  MongoDB Connection Required:');
+    console.log('   1. Copy "backend/.env.example" to "backend/.env"');
+    console.log('   2. Update MONGODB_URI with your MongoDB connection string');
+    console.log('   3. Restart the server: npm run dev\n');
+  } else {
+    console.log(`\n✅ MongoDB URI configured`);
+    console.log(`   Database Status: ${isDBConnected ? '✅ Connected' : '⏳ Connecting...'}\n`);
+  }
+
+  console.log(`📍 Frontend URL: ${FRONTEND_URL}`);
+  console.log(`🌍 Environment: ${NODE_ENV}\n`);
+});
+
+// Graceful shutdown
+process.on('SIGINT', async () => {
+  console.log('\n\n🛑 Shutting down gracefully...');
+  try {
+    await mongoose.connection.close();
+    console.log('✅ MongoDB connection closed');
+  } catch (err) {
+    console.error('Error closing MongoDB:', err);
+  }
+  process.exit(0);
 });

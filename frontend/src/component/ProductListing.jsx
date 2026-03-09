@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from "react";
 import { ShoppingCart, Heart, Star, Check } from "lucide-react";
 import { useCart } from "./CartContext";
+import { apiClient } from "../services/apiClient";
 
 const ProductListing = () => {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [addedProductId, setAddedProductId] = useState(null);
+  const [error, setError] = useState(null);
 
   const { addToCart } = useCart();
 
@@ -19,20 +21,24 @@ const ProductListing = () => {
     }, 2000);
   };
 
-
   // Fetch products from backend
   useEffect(() => {
-    fetch("http://localhost:5000/products")
-      .then((res) => res.json())
-      .then((data) => {
+    const fetchProducts = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const data = await apiClient.get("/products");
         console.log("📦 Products fetched:", data);
         setProducts(data);
-        setLoading(false); // ✅ stop loading
-      })
-      .catch((err) => {
-        console.error("Error fetching products:", err);
+      } catch (err) {
+        console.error("❌ Error fetching products:", err);
+        setError("Failed to load products. Please try again later.");
+      } finally {
         setLoading(false);
-      });
+      }
+    };
+
+    fetchProducts();
   }, []);
 
   if (loading) {
@@ -40,6 +46,35 @@ const ProductListing = () => {
       <div className="flex justify-center items-center h-64 text-slate-400">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
       </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <section id="products" className="py-20">
+        <div className="container mx-auto px-8">
+          <div className="flex justify-center items-center h-64">
+            <div className="text-center">
+              <p className="text-red-600 font-bold text-lg mb-2">⚠️ {error}</p>
+              <p className="text-slate-500 text-sm">
+                Make sure the backend API is running and the VITE_API_URL environment variable is set correctly.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  if (products.length === 0) {
+    return (
+      <section id="products" className="py-20">
+        <div className="container mx-auto px-8">
+          <div className="flex justify-center items-center h-64">
+            <p className="text-slate-500">No products available at the moment.</p>
+          </div>
+        </div>
+      </section>
     );
   }
 
