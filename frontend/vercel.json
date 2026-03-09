@@ -4,7 +4,6 @@
   "installCommand": "npm install",
   "framework": "vite",
   "outputDirectory": "dist",
-  "handleMiss": true,
   "cleanUrls": false,
   "env": {
     "VITE_API_URL": "@vite_api_url"
